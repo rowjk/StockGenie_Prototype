@@ -12,23 +12,23 @@ https://rowjk.github.io/StockGenie_Demo/
 
 ### 透過模擬投資資料，本 Prototype 展示：
 
-投資組合 Dashboard
-個股資訊瀏覽
-AI 分析摘要
-投資洞察體驗
+- 投資組合 Dashboard
+- 個股資訊瀏覽
+- AI 分析摘要
+- 投資洞察體驗
 
 ### 此專案主要目的為展示如何透過 AI Agent 與 Vibe Coding 方法，快速將產品構想轉換為可操作的數位產品體驗。
 
-Product Vision
+#### Product Vision
 打造一個協助使用者快速理解投資資訊的 AI 投資助手。
 
-透過整合：
-Portfolio Overview
-Stock Insights
-Risk Indicators
-AI-generated Summary
+#### 透過整合：
+- Portfolio Overview
+- Stock Insights
+- Risk Indicators
+- AI-generated Summary
 
-協助使用者降低資訊整理成本，提升市場資訊理解效率。
+#### 協助使用者降低資訊整理成本，提升市場資訊理解效率。
 
 Demo Features
 📊 Investment Dashboard
