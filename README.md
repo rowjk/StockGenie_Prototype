@@ -1,31 +1,28 @@
 # StockGenie AI Investment Prototype
 
-使用 AI 輔助開發（Vibe Coding）快速打造的智慧投資助手產品 Prototype
+## 使用 AI 輔助開發（Vibe Coding）快速打造的智慧投資助手產品 Prototype
 
 🌐 Live Demo
 https://rowjk.github.io/StockGenie_Demo/
 
-專案介紹
+## 專案介紹
 
-StockGenie AI Investment Prototype 是一個以 AI 輔助開發方式打造的智慧投資助手體驗展示專案。
-
+### StockGenie 是一個以 AI 輔助開發方式打造的智慧投資助手體驗展示專案。
 本專案源自原始 StockGenie 服務概念，為了展示產品體驗與快速原型開發能力，將後端服務、資料庫與即時資料串接抽離，保留前端互動流程與產品設計。
 
-透過模擬投資資料，本 Prototype 展示：
+### 透過模擬投資資料，本 Prototype 展示：
 
 投資組合 Dashboard
 個股資訊瀏覽
 AI 分析摘要
 投資洞察體驗
 
-此專案主要目的為展示如何透過 AI Agent 與 Vibe Coding 方法，快速將產品構想轉換為可操作的數位產品體驗。
+### 此專案主要目的為展示如何透過 AI Agent 與 Vibe Coding 方法，快速將產品構想轉換為可操作的數位產品體驗。
 
 Product Vision
-
 打造一個協助使用者快速理解投資資訊的 AI 投資助手。
 
 透過整合：
-
 Portfolio Overview
 Stock Insights
 Risk Indicators
