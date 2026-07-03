@@ -6,6 +6,9 @@
 const US_DEFAULT_ITEMS = [
     { symbol: '^GSPC', name: 'S&P 500 指數' },
     { symbol: 'VOO',   name: 'Vanguard S&P 500 ETF' },
+    { symbol: 'NVDA',  name: 'NVIDIA Corporation' },
+    { symbol: 'MSFT',  name: 'Microsoft Corporation' },
+    { symbol: 'TSLA',  name: 'Tesla, Inc.' },
 ];
 const US_WATCHLIST_MAX = 20;     // 自選上限，避免輪詢量失控
 const US_REFRESH_MS = 60 * 1000; // 與後端盤中快取 TTL (60s) 對齊
@@ -20,10 +23,22 @@ const usState = {
 function loadUsWatchlistLocal() {
     try {
         const raw = JSON.parse(localStorage.getItem('usWatchlist'));
-        // 僅在 key 不存在/格式錯誤時帶入預設；使用者清空清單應維持空清單
         if (Array.isArray(raw)) {
-            return raw.filter(i => i && typeof i.symbol === 'string')
-                      .map(i => ({ symbol: i.symbol, name: i.name || i.symbol }));
+            let list = raw.filter(i => i && typeof i.symbol === 'string')
+                          .map(i => ({ symbol: i.symbol, name: i.name || i.symbol }));
+            // 自動補上預設的必備美股，若不存在則新增
+            const required = ['NVDA', 'MSFT', 'TSLA'];
+            let modified = false;
+            required.forEach(sym => {
+                if (!list.some(item => item.symbol === sym)) {
+                    list.push({ symbol: sym, name: sym === 'NVDA' ? 'NVIDIA Corporation' : (sym === 'MSFT' ? 'Microsoft Corporation' : 'Tesla, Inc.') });
+                    modified = true;
+                }
+            });
+            if (modified) {
+                localStorage.setItem('usWatchlist', JSON.stringify(list));
+            }
+            return list;
         }
     } catch (e) { /* 格式錯誤視同未設定 */ }
     return [...US_DEFAULT_ITEMS];

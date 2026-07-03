@@ -2,6 +2,18 @@
    StockGenie API Stock Dashboard - Core Frontend JavaScript (Traditional Chinese)
    ==========================================================================
    版本歷史：
+   v1.12.1 (2026-07-02)
+   - [功能] 自選股監控新增支援期貨（FUT）合約（如台指期大台 `TXFR1`、小台 `MXFR1`），自動判定為唯讀觀察商品並隱藏下單按鈕。
+   v1.12.0 (2026-07-02)
+   - [優化] 程式碼品質強化（資產歷史 read-modify-write 鎖整段持鎖、SSE 串流 timeout、.env 快取、shell 安全、統一錯誤格式）。
+   v1.11.9 (2026-07-02)
+   - [安全] 將 SSE 成交回報連線改經本機 Proxy 代理（/proxy/），套用完整的 Host/Origin 同源性安全過濾防護。
+   v1.11.8 (2026-07-02)
+   - [優化] 前端改單/刪單失敗訊息中加入非 API 管道下單限制之提示說明；更新 `walkthrough.md` 與 `README.md` 文件。
+   v1.11.7 (2026-07-01)
+   - [修正] 修復畫面縮小時「未成交委託」跑版與表格內容擠壓換行的問題，新增水平滾動容器，並將所有表格單元格樣式設定為不自動換行（nowrap）。
+   v1.11.6 (2026-07-01)
+   - [修正] 解決 Kbars 歷史走勢與均線查詢之 30 天日期限制（HTTP 400 錯誤），前端改為 30 天分段並行查詢並進行 1D 日 K 重取樣，且導入 Promise 快取鎖定以防止重複查詢與防跑版 Race Condition 護欄。
    v1.6.2 (2026-06-11)
    - [優化] 前端所有數值（包含自選股、歷史走勢、庫存部位等）均加入千分位分隔號，提升閱讀清晰度。
    v1.6.1 (2026-06-11)
@@ -127,7 +139,7 @@ let state = {
     pnlStartDate: '',        // 已實現損益查詢開始日期
     pnlEndDate: '',          // 已實現損益查詢結束日期
     twseFeedTimer: null,     // TWSE 公告/除權息定時更新
-    demoMode: localStorage.getItem('demoMode') === 'true' || (localStorage.getItem('demoMode') === null && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1'), // Demo 演示模式（前端攔截假數據）
+    demoMode: true, // Demo 演示模式（網頁版強制啟用）
 };
 
 // ── 初始化載入 ──────────────────────────────────────────────────────────
@@ -550,8 +562,8 @@ function startSSE() {
     closeSSE();
     if (state.demoMode) return; // Demo 模式不建立實體 SSE 連線
     
-    // 連線至永豐即時回報 SSE 端點 (直連 8080 避免 proxy 阻塞)
-    state.sseConnection = new EventSource(`http://127.0.0.1:8080/api/v1/stream/data/order_event`);
+    // 連線至永豐即時回報 SSE 端點 (經由 proxy 以套用 Host/Origin 同源保護)
+    state.sseConnection = new EventSource(`/proxy/api/v1/stream/data/order_event`);
     
     state.sseConnection.onmessage = (event) => {
         try {
@@ -1349,7 +1361,12 @@ async function submitOrderMgmt() {
             setTimeout(fetchPendingOrders, 1200); // 略等回報後重拉（SSE 亦會觸發）
             setTimeout(fetchTradeLogs, 1200);     // v1.7.2 改單也產生新紀錄
         } else {
-            alert(`${actionText}失敗：${await resp.text()}`);
+            const errText = await resp.text();
+            let extraTip = '';
+            if (errText.includes('CA not activated for:')) {
+                extraTip = '\n\n【提示】若此委託單是經由手機 APP、網頁或電腦看盤軟體等非 API 管道所建立，將無法透過 API 進行刪改，請回到原下單管道進行操作。';
+            }
+            alert(`${actionText}失敗：${errText}${extraTip}`);
         }
     } catch (e) {
         console.error(`委託單${actionText} API 調用失敗`, e);
@@ -1550,8 +1567,14 @@ async function initWatchlist() {
                 const secType = item.security_type || 'STK';
                 let resp = await smartFetch(`${API_BASE}/data/contracts/${item.code}?security_type=${secType}`);
                 if (!resp.ok) {
-                    const altType = secType === 'STK' ? 'IND' : 'STK';
-                    resp = await smartFetch(`${API_BASE}/data/contracts/${item.code}?security_type=${altType}`);
+                    const fallbacks = ['STK', 'IND', 'FUT'].filter(t => t !== secType);
+                    for (const t of fallbacks) {
+                        resp = await smartFetch(`${API_BASE}/data/contracts/${item.code}?security_type=${t}`);
+                        if (resp.ok) {
+                            item.security_type = t;
+                            break;
+                        }
+                    }
                 }
                 if (resp.ok) {
                     const contract = await resp.json();
@@ -1585,12 +1608,16 @@ function initWatchlistControls() {
         }
 
         try {
-            // 查詢合約資訊，優先用 STK (股票) 查，若查無則用 IND (指數) 查
             let secType = 'STK';
             let resp = await smartFetch(`${API_BASE}/data/contracts/${code}?security_type=STK`);
             if (!resp.ok) {
                 resp = await smartFetch(`${API_BASE}/data/contracts/${code}?security_type=IND`);
-                if (resp.ok) secType = 'IND';
+                if (resp.ok) {
+                    secType = 'IND';
+                } else {
+                    resp = await smartFetch(`${API_BASE}/data/contracts/${code}?security_type=FUT`);
+                    if (resp.ok) secType = 'FUT';
+                }
             }
             if (resp.ok) {
                 const contract = await resp.json();
@@ -1741,7 +1768,7 @@ function renderWatchlist() {
     state.watchlist.forEach((item, index) => {
         const div = document.createElement('div');
         div.className = 'watchlist-item';
-        const isIndex = item.security_type === 'IND';
+        const isIndex = item.security_type === 'IND' || item.security_type === 'FUT';
         if (isIndex) {
             div.classList.add('watchlist-item-index');
         }
@@ -1976,26 +2003,112 @@ function updateDetailView(code) {
 async function fetchKbarsWithCache(code) {
     const CACHE_MS = 60 * 60 * 1000; // 1 小時
     const cached = kbarsCache[code];
-    if (cached && (Date.now() - cached.fetchedAt < CACHE_MS)) {
-        return cached.closes;
+    if (cached) {
+        if (cached instanceof Promise) {
+            return cached;
+        }
+        if (Date.now() - cached.fetchedAt < CACHE_MS) {
+            return cached.closes;
+        }
     }
+
     const item = state.watchlist.find(wi => wi.code === code);
     const exchange = item ? (item.exchange || 'TSE') : 'TSE';
+    const secType = item ? (item.security_type || 'STK') : 'STK';
     const end = getLocalDateStr();
     const startDate = new Date();
     startDate.setFullYear(startDate.getFullYear() - 2);
     const start = getLocalDateStr(startDate);
-    const secType = item ? (item.security_type || 'STK') : 'STK';
-    const resp = await smartFetch(`${API_BASE}/data/kbars`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contract: { security_type: secType, exchange, code }, start, end, frequency: '1D' })
-    });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const closes = (data.Close || data.close || []).map(Number);
-    kbarsCache[code] = { closes, fetchedAt: Date.now() };
-    return closes;
+
+    const promise = (async () => {
+        if (state.demoMode) {
+            const resp = await smartFetch(`${API_BASE}/data/kbars`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contract: { security_type: secType, exchange, code }, start, end, frequency: '1D' })
+            });
+            if (!resp.ok) return null;
+            const data = await resp.json();
+            const closes = (data.Close || data.close || []).map(Number);
+            return closes;
+        }
+
+        // 實體模式：拆分 30 天區間以符合上游 daemon 限制，並在前端重取樣為日 K
+        const chunks = [];
+        let currentStart = new Date(startDate);
+        const targetEnd = new Date();
+        
+        while (currentStart < targetEnd) {
+            let currentEnd = new Date(currentStart);
+            currentEnd.setDate(currentEnd.getDate() + 29); // 30 days inclusive
+            if (currentEnd > targetEnd) {
+                currentEnd = new Date(targetEnd);
+            }
+            chunks.push({
+                start: getLocalDateStr(currentStart),
+                end: getLocalDateStr(currentEnd)
+            });
+            currentStart = new Date(currentEnd);
+            currentStart.setDate(currentStart.getDate() + 1);
+        }
+
+        try {
+            const promises = chunks.map(chunk => 
+                smartFetch(`${API_BASE}/data/kbars`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contract: { security_type: secType, exchange, code }, start: chunk.start, end: chunk.end, frequency: '1D' })
+                }).then(async resp => {
+                    if (!resp.ok) return null;
+                    try {
+                        return await resp.json();
+                    } catch (e) {
+                        return null;
+                    }
+                }).catch(() => null)
+            );
+
+            const results = await Promise.all(promises);
+            
+            // 合併結果並重取樣成日 K (取每天最後一筆分鐘 K 價格作為日收盤)
+            const dailyMap = {};
+            results.forEach(data => {
+                if (!data) return;
+                const dates = data.datetime || data.Datetime || [];
+                const closes = data.close || data.Close || [];
+                for (let i = 0; i < dates.length; i++) {
+                    if (dates[i] && closes[i] !== undefined) {
+                        const dateStr = dates[i].substring(0, 10); // "YYYY-MM-DD"
+                        dailyMap[dateStr] = Number(closes[i]);
+                    }
+                }
+            });
+
+            const sortedDates = Object.keys(dailyMap).sort();
+            if (sortedDates.length === 0) return null;
+            
+            return sortedDates.map(d => dailyMap[d]);
+        } catch (e) {
+            console.error("fetchKbarsWithCache chunking 失敗:", e);
+            return null;
+        }
+    })();
+
+    kbarsCache[code] = promise;
+
+    try {
+        const closes = await promise;
+        if (!closes) {
+            delete kbarsCache[code];
+            return null;
+        }
+        kbarsCache[code] = { closes, fetchedAt: Date.now() };
+        return closes;
+    } catch (e) {
+        delete kbarsCache[code];
+        console.error("fetchKbarsWithCache 執行錯誤:", e);
+        return null;
+    }
 }
 
 // 只更新 MA 數值欄位，不繪製圖表（selectWatchlistItem 一律呼叫）
@@ -2004,6 +2117,7 @@ async function loadMAStats(code) {
     const idMap = { 5: 'detail-ma5', 20: 'detail-ma20', 60: 'detail-ma60', 240: 'detail-ma240' };
     try {
         const closes = await fetchKbarsWithCache(code);
+        if (document.getElementById('detail-code').textContent !== code) return;
         if (!closes || closes.length < 5) return;
         MA_PERIODS.forEach(period => {
             const el = document.getElementById(idMap[period]);
@@ -2125,6 +2239,7 @@ async function renderDetailMAChart(code) {
     try {
         // 使用快取（與 loadMAStats 共用，避免重複抓 2 年資料）
         const allCloses = await fetchKbarsWithCache(code);
+        if (document.getElementById('detail-code').textContent !== code) return;
         if (!allCloses) { legendEl.innerHTML = '<span style="color:var(--text-muted);font-size:0.78rem;">無法取得歷史資料</span>'; return; }
 
         // 重新取得畫布尺寸（fetch 期間可能被重繪過）

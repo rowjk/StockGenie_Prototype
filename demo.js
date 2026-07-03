@@ -10,6 +10,8 @@ const DEMO_KNOWN_TW = {
     '001': { name: '加權指數', price: 22000.0 },
     'TSE001': { name: '加權指數', price: 22000.0 },
     'OTC101': { name: '櫃買指數', price: 260.0 },
+    'TXFR1': { name: '台指期近月', price: 22000.0 },
+    'MXFR1': { name: '小台指近月', price: 22000.0 },
     
     // 大型權值股
     '2330': { name: '台積電', price: 950.0 },
@@ -69,6 +71,9 @@ const DEMO_KNOWN_US = {
     'VOO':   { name: 'Vanguard S&P 500 ETF', price: 561.2, type: 'ETF' },
     'QQQ':   { name: 'Invesco QQQ Trust', price: 529.8, type: 'ETF' },
     'AAPL':  { name: 'Apple Inc.', price: 236.4, type: 'EQUITY' },
+    'NVDA':  { name: 'NVIDIA Corporation', price: 125.0, type: 'EQUITY' },
+    'MSFT':  { name: 'Microsoft Corporation', price: 420.0, type: 'EQUITY' },
+    'TSLA':  { name: 'Tesla, Inc.', price: 200.0, type: 'EQUITY' },
 };
 
 // PRD §2.2 初始值；其後隨輪詢以隨機漫步波動
@@ -630,6 +635,7 @@ async function smartFetch(url, options = {}) {
         return mockResponse(demoState.credentials);
     }
     if (url.includes('/api/trade-permission')) return mockResponse({ trading_permitted: true, reason: '' });
+    if (url.includes('/api/shioaji/disconnect')) return mockResponse({ success: true });
     if (url.includes('/api/trade-logs')) return mockResponse(demoState.tradeLogs); // v1.7 不洩漏真實委託紀錄
     if (url.includes('/api/asset-history')) return mockResponse(demoAssetHistory()); // GET/POST/匯入/刪除一律回傳唯讀假歷史
     if (url.includes('/api/twse-announcements')) return mockResponse(demoAnnouncements());
@@ -645,21 +651,11 @@ function initDemoMode() {
     updateDemoBadge();
     const toggle = document.getElementById('demo-mode-toggle');
     if (!toggle) return;
-    toggle.checked = state.demoMode;
+    toggle.checked = true; // 強制勾選
     toggle.addEventListener('change', (e) => {
-        if (e.target.checked) {
-            // 開啟：重新載入頁面，所有資料改以攔截器供應
-            localStorage.setItem('demoMode', 'true');
-            showToastNotification('[DEMO 模式] 已啟用，頁面即將重新載入...');
-            setTimeout(() => location.reload(), 600);
-        } else {
-            // 關閉會還原真實資產，須先通過安全驗證（答對 PEA6）
-            e.target.checked = true; // 先還原勾選，驗證通過才真正關閉
-            openCredentialsLockModal(() => {
-                localStorage.setItem('demoMode', 'false');
-                showToastNotification('已關閉 Demo 模式，正在還原真實帳戶資料...');
-                setTimeout(() => location.reload(), 600);
-            });
+        if (!e.target.checked) {
+            e.target.checked = true; // 強制恢復勾選
+            showToastNotification('本版本僅有線上demo功能，無法切換。');
         }
     });
 }
